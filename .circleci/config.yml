@@ -17,163 +17,665 @@
 #     jobs:
 #       - build
       
+# version: 2.1
+
+# orbs:
+#   slack: circleci/slack@3.4.2
+
+# parameters:
+#   rollback:
+#     type: string
+#     default: "latest"
+#   dryrun:
+#     type: boolean
+#     default: false
+
+# workflows:
+#   workflow:
+#     when:
+#       equal: ["latest", << pipeline.parameters.rollback >>]
+#     jobs:
+#       - test
+#       - test-assets
+#       - build:
+#           requires:
+#             - test
+#             - test-assets
+#           filters:
+#             branches:
+#               only:
+#                 - master
+#                 - /staging-.*/
+#                 - /sandbox-.*/
+#   rollback:
+#     unless:
+#       equal: ["latest", << pipeline.parameters.rollback >>]
+#     jobs:
+#       - rollback
+
+# jobs:
+#   test:
+#     docker:
+#       - image: circleci/elixir:1.9.1
+#         user: root
+#       - image: redis
+#       - image: mdillon/postgis
+#         environment:
+#           POSTGRES_USER: postgres
+#           POSTGRES_PASSWORD: postgres
+
+#     working_directory: ~/repo
+#     steps:
+#       - checkout
+#       - run:
+#           name: Install Dependencies
+#           command: ./ci/provision.sh
+#       - restore_cache:
+#           key: v1-test-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
+#       - run:
+#           name: Run Unit Test
+#           command: ./ci/test.sh
+#       - save_cache:
+#           key: v1-test-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
+#           paths:
+#             - "assets/node_modules"
+#             - "deps"
+#             - "_build"
+#       - slack/status:
+#           fail_only: true
+#           mentions: "here"
+#           only_for_branches: "master"
+
+#   test-assets:
+#     docker:
+#       - image: cimg/node:12.18
+#         user: root
+#     working_directory: ~/repo
+#     steps:
+#       - checkout
+#       - run:
+#           name: Install `apt-get` Dependencies
+#           command: |
+#             apt-get update -qq && apt-get install -qq -y \
+#               libgtk2.0-0 libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2 libxtst6 xauth xvfb
+#       - restore_cache:
+#           key: v2-test-assets-{{ checksum "assets/package-lock.json" }}
+#       - run:
+#           name: Install `package.json` Dependencies
+#           command: |
+#             cd assets
+#             if [[ ! -d node_modules ]]; then
+#               npm ci
+#             fi
+#       - save_cache:
+#           key: v2-test-assets-{{ checksum "assets/package-lock.json" }}
+#           paths:
+#             - "assets/node_modules"
+#             - "/root/.cache/Cypress"
+#       - run:
+#           name: Build
+#           command: |
+#             cd assets
+#             node_modules/.bin/webpack --mode production --env.COMMITID=$CIRCLE_SHA1 --config ./webpack.config.fwn.js
+#             node_modules/.bin/webpack --mode production --env.COMMITID=$CIRCLE_SHA1 --config ./webpack.config.pwa.js
+#             node_modules/.bin/webpack --mode production --env.COMMITID=$CIRCLE_SHA1 --config ./webpack.config.tvapp.js
+#       - run:
+#           name: Test
+#           command: |
+#             cd assets
+#             npm run test:ci
+
+#   build:
+#     docker:
+#       - image: circleci/elixir:1.9.1
+#         user: root
+
+#     working_directory: ~/repo
+#     steps:
+#       - checkout
+#       - setup_remote_docker:
+#           version: 17.10.0-ce
+#       - run:
+#           name: Install Dependencies
+#           command: ./ci/provision.sh
+#       - restore_cache:
+#           key: v1-release-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
+#       - deploy:
+#           name: Deployment
+#           command: ./ci/deploy.sh
+#       - save_cache:
+#           key: v1-release-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
+#           paths:
+#             - "assets/node_modules"
+#             - "deps"
+#             - "_build"
+#       - slack/status:
+#           fail_only: true
+#           mentions: "here"
+#           only_for_branches: "master"
+
+#   rollback:
+#     docker:
+#       - image: circleci/elixir:1.9.1
+#         user: root
+
+#     working_directory: ~/repo
+#     steps:
+#       - checkout
+#       - run:
+#           name: Install Dependencies
+#           command: ./ci/provision.sh
+#       - run:
+#           name: Rollback in dry run mode
+#           command: DRYRUN=true ./ci/maintenance.sh rollback << pipeline.parameters.rollback >>
+#           when:
+#             condition: << pipeline.parameters.dryrun >>
+#       - run:
+#           name: Rollback
+#           command: ./ci/maintenance.sh rollback << pipeline.parameters.rollback >>
+#           unless:
+#             condition: << pipeline.parameters.dryrun >>
+#       - slack/status:
+#           mentions: "here"
+# Javascript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-javascript/ for more details
+#
 version: 2.1
+jobs:
+  build:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node
+    resource_class: large
 
-orbs:
-  slack: circleci/slack@3.4.2
+    working_directory: ~/repo
 
-parameters:
-  rollback:
-    type: string
-    default: "latest"
-  dryrun:
-    type: boolean
-    default: false
+    steps:
+      - checkout
+
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum "package.json" }}
+          # fallback to using the latest cache if no exact match is found
+          - v1-dependencies-
+
+      - run: yarn install
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
+
+      - run:
+          name: Update version
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "medibank_ivy_release" ];
+            then
+              npm version --no-git-tag-version patch
+            else
+              echo "Not medibank_ivy_release branch"
+            fi
+
+      - run: yarn test
+      - run: |
+          set +o pipefail
+          git diff origin/master... --name-only --diff-filter=AMCRTU | grep ".js$" | xargs --no-run-if-empty $(npm bin)/eslint --quiet
+      # To avoid Treating warnings as errors because process.env.CI = true.
+      # https://circleci.com/gh/sproutatwork/Sprout30/2
+      - run: |
+          CI=false yarn build-web
+
+      - run:
+          name: Move meta.json to build dir
+          command: |
+            node generate-build-version.js
+            cp public/meta.json build/meta.json
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - ./build
+  deploy:
+    docker:
+      - image: circleci/python:3.5.8-buster
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "7b:fc:3a:40:73:65:47:dd:bb:86:c7:2d:dd:5b:0c:7e"
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: |
+          sudo pip install awscli
+          curl -sL https://deb.nodesource.com/setup_12.x | sudo bash -
+          sudo apt-get install -y nodejs
+      - run: npm run cd:testau
+      - run:
+          name: Commit package.json version
+          command: |
+              git config user.name $CIRCLE_USERNAME
+              git config user.email "$CIRCLE_USERNAME@sproutatwork.com"
+              git branch --set-upstream-to=origin/$CIRCLE_BRANCH $CIRCLE_BRANCH
+              git pull
+              npm version --no-git-tag-version patch
+              git add package.json
+              git commit -m "[ci skip] $CIRCLE_BRANCH - Changing version in package.json"
+              git push
+
+
+  build-android:
+    working_directory: ~/Sprout30
+    docker:
+      - image: circleci/android:api-28
+    environment:
+      JAVA_OPTIONS: -Xmx2g
+      GRADLE_OPTS: '-Xmx3g -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx2g -XX:+HeapDumpOnOutOfMemoryError"'
+    shell: /bin/bash --login -o pipefail
+    parameters:
+      push_to_app_store:
+        type: string
+        default: ""
+    steps:
+      - checkout
+
+      - restore_cache:
+          key: jars-LB-{{ checksum "android/build.gradle" }}
+
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: jars-LB-{{ checksum "android/build.gradle" }}
+
+
+      - run: |
+             curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+             echo 'export NVM_DIR="$HOME/.nvm"' >> $BASH_ENV
+             echo ' [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
+
+      - run: |
+             nvm install v10
+             nvm use 10
+             nvm alias default 10
+             npm install -g react-native-cli
+             npm install -g react-native-git-upgrade
+             npm install -g react-native-rename
+             npm install -g eslint eslint-watch eslint-plugin-react-native
+
+      - run: npm install -g yo generator-rn-toolbox
+
+      - run: npm install yarn --global
+
+      - restore_cache:
+          key: node-v1-LB-{{ checksum "package.json" }}-android
+
+      - run:
+          working_directory: Sprout30
+          command: yarn install
+
+      - save_cache:
+          key: node-v1-LB-{{ checksum "package.json" }}-android
+          paths:
+            - node_modules
+
+      - run:
+          name: Decode Andorid KeyStore
+          command: echo $ANDROID_KEY_STORE | base64 --decode >> /home/circleci/Sprout30/android/app/sprout-mobile-key.keystore
+
+
+      - run:
+          name: Initial build
+          working_directory: ~/Sprout30/android
+          command: ./gradlew clean app:assembleRelease --debug
+      - run:
+          name: Copy Bundle File
+          working_directory: ~/Sprout30/android
+          command: cp ./app/build/intermediates/assets/release/index.android.bundle.map ./app/build/outputs/apk/release
+
+      - run:
+          name: Copy APK file
+          working_directory: ~/Sprout30
+          command: |
+              export npm_package_name=$(cat package.json | grep name | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[[:space:]]')
+              mv ./android/app/build/outputs/apk/release/app-release.apk ./android/app/build/outputs/apk/release/$npm_package_name.apk
+
+      - when:
+          condition: <<parameters.push_to_app_store>>
+          steps:
+
+            - run:
+                name: Commit the version properties file
+                working_directory: ~/Sprout30
+                command: |
+                    git config user.name SproutGithub
+                    git config user.email "dev@sproutatwork.com"
+                    git branch --set-upstream-to=origin/$CIRCLE_BRANCH $CIRCLE_BRANCH
+                    git pull
+                    git status
+                    git add android/app/version.properties
+                    git commit -m "[ci skip] $CIRCLE_BRANCH - Bumped the android build version"
+                    git push
+                    export majorVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_MAJOR |  cut -d'=' -f2)
+                    export minorVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_MINOR |  cut -d'=' -f2)
+                    export patchVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_PATCH |  cut -d'=' -f2)
+                    export buildVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_BUILD |  cut -d'=' -f2)
+                    export VERSION=$majorVersion.$minorVersion.$patchVersion
+                    cd ~/Sprout30
+                    git tag v-LB-$VERSION-android-build-$buildVersion
+                    git push origin --tags
+
+            - run:
+                name: Install AWS CLI for Andorid
+                working_directory: ~/Sprout30/ios
+                command: |
+                    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                    unzip awscliv2.zip
+                    sudo ./aws/install
+
+            - run:
+                name: Copy map file to S3
+                working_directory: ~/Sprout30
+                command: |
+                    export majorVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_MAJOR |  cut -d'=' -f2)
+                    export minorVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_MINOR |  cut -d'=' -f2)
+                    export patchVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_PATCH |  cut -d'=' -f2)
+                    export buildVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_BUILD |  cut -d'=' -f2)
+                    export VERSION=$majorVersion.$minorVersion.$patchVersion.$buildVersion
+                    npm_package_name=$(cat package.json | grep name | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[[:space:]]')
+                    echo "PACKAGE NAME IS $npm_package_name"
+                    echo "Version number for this build is $VERSION"
+                    cd ~/Sprout30/android/app/build/outputs/apk/release
+                    cp index.android.bundle.map index.android.bundle.map.$npm_package_name.$VERSION
+                    aws s3 cp index.android.bundle.map.$npm_package_name.$VERSION s3://mobile3-mapfiles/
+            - run:
+                name: Upload to Slack
+                working_directory: ~/Sprout30
+                command: |
+                    export majorVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_MAJOR |  cut -d'=' -f2)
+                    export minorVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_MINOR |  cut -d'=' -f2)
+                    export patchVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_PATCH |  cut -d'=' -f2)
+                    export buildVersion=$(cat ~/Sprout30/android/app/version.properties | grep VERSION_BUILD |  cut -d'=' -f2)
+                    export VERSION=$majorVersion.$minorVersion.$patchVersion.$buildVersion
+                    export npm_package_name=$(cat package.json | grep name | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[[:space:]]')
+                    cd ~/Sprout30/android
+                    curl -F file=@app/build/outputs/apk/release/$npm_package_name.apk -F channels=$SLACK_CHANNEL -H "Authorization: Bearer $SLACK_API_TOKEN" -F title="${CIRCLE_PROJECT_REPONAME} | branch -> ${CIRCLE_BRANCH} | version -> $VERSION"  https://slack.com/api/files.upload
+
+      - store_artifacts:
+          path: android/app/build/outputs/apk/
+          destination: apks/
+
+     
+
+  build-ios:
+    macos:
+      xcode: 11.2.1
+    working_directory: ~/Sprout30
+    environment:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      FL_OUTPUT_DIR: output
+    shell: /bin/bash --login
+    parameters:
+      push_to_app_store:
+        type: string
+        default: ""
+
+    steps:
+
+      - checkout
+
+      - restore_cache:
+          key: 1-gems-LB-ios-{{ checksum "Gemfile.lock" }}
+
+      - run: bundle check || bundle install --path vendor/bundle
+
+      - save_cache:
+          key: 1-gems-LB-ios-{{ checksum "Gemfile.lock" }}
+          paths:
+            - vendor/bundle
+
+      - run:
+          name: Decode Certificates
+          working_directory: ~/Sprout30/fastlane
+          command: base64 -D -o Certificates.p12 \<<< $CERTIFICATES
+
+      - run:
+          name: Make Provisioning Profiles directory
+          command: mkdir -pv ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - run:
+          name: Decode Provisioning Profiles For Sprout
+          context: lb-global
+          command: base64 -D -o ~/Library/MobileDevice/Provisioning\ Profiles/LiveBetter_20201.mobileprovision \<<< $LIVEBETTER_APPSTORE
+
+
+      - run:
+          name: Decode Provisioning Profiles For Sprout Watch
+          context: lb-global
+          command: base64 -D -o ~/Library/MobileDevice/Provisioning\ Profiles/Live_Better_Watch_AppStore_20191.mobileprovision \<<< $LIVEBETTER_WATCH
+
+
+      - run:
+          name: Decode Provisioning Profiles For Watch Extension
+          context: lb-global
+          command: base64 -D -o ~/Library/MobileDevice/Provisioning\ Profiles/Live_Better_Watch_extension_AppStore_20191.mobileprovision \<<< $LIVEBETTER_WATCH_EXTENSION
+
+
+      - run:
+          name: Setting up fastlane for CircleCI
+          working_directory: ~/Sprout30/fastlane
+          command: bundle exec fastlane ios beta
+
+      - run: brew install wget
+
+      - run: |
+             wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.2/install.sh | bash
+             echo 'export NVM_DIR="/Users/distiller/.nvm"' >> $BASH_ENV
+             echo ' [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> $BASH_ENV
+
+
+      - run: |
+             nvm install v10
+             nvm use 10
+             nvm alias default 10
+             npm install -g react-native-cli
+             npm install -g react-native-git-upgrade
+             npm install -g react-native-rename
+             npm install -g eslint eslint-watch eslint-plugin-react-native
+
+      - run: npm install -g yo generator-rn-toolbox
+
+
+      - run:
+          name: Install Homebrew Dependencies
+          command: brew install yarn
+
+
+      - run: brew install imagemagick
+      - run: brew install watchman
+      - run: gem list --local | grep cocoapods | awk '{print $1}' | xargs sudo gem uninstall
+
+      - run: |
+             sudo rm /usr/local/bin/xcodeproj
+             brew install cocoapods
+             brew link --overwrite cocoapods
+      
+      - run:
+          working_directory: Sprout30
+          command: yarn install
+
+      - run:
+          name: Run language update
+          working_directory: ~/Sprout30
+          command: |
+                   git config user.name SproutGithub
+                   git config user.email "dev@sproutatwork.com"
+                   git branch --set-upstream-to=origin/$CIRCLE_BRANCH $CIRCLE_BRANCH
+                   git pull
+                   npm run language
+                   set -x
+                   git add ../src/i18n/locales.json
+                   git commit -m "[ci skip] $CIRCLE_BRANCH - Updated locales" || echo "No change to the locales file"
+
+
+      - unless:
+          condition: <<parameters.push_to_app_store>>
+          steps:
+            - run:
+                name: Build IOS Application only
+                working_directory: ~/Sprout30/ios
+                command: pod install && xcodebuild -workspace LiveBetter.xcworkspace -scheme LiveBetter
+
+      - when:
+          condition: <<parameters.push_to_app_store>>
+          steps:
+            - run:
+                name: Increment build numbers CFBundleVersion
+                working_directory: ~/Sprout30/ios
+                command: xcrun agvtool next-version -all
+
+            - run:
+                name: Archive LiveBetter App
+                working_directory: ~/Sprout30/ios
+                command: pod install && xcodebuild -workspace LiveBetter.xcworkspace -scheme LiveBetter archive -archivePath ~/release-app/LiveBetter.xcarchive
+
+            - run:
+                name: Upload dSYMs
+                working_directory: ~/Sprout30/ios/Pods/Fabric
+                command: ./upload-symbols -gsp ~/Sprout30/ios/GoogleService-Info.plist -p ios ~/release-app/LiveBetter.xcarchive/dSYMs/*.dSYM
+
+
+            - run:
+                name: Export LiveBetter App to IPA
+                working_directory: ~/Sprout30/ios
+                command: xcodebuild -exportArchive -archivePath ~/release-app/LiveBetter.xcarchive -exportPath ~/release-ipa -exportOptionsPlist ./exportOptions.plist
+
+            - run:
+                name: Decode Deployment key
+                working_directory: ~/Sprout30/ios/
+                command: |
+                    mkdir private_keys
+                    cd ./private_keys
+                    base64 -D -o AuthKey_8MRB582VKQ.p8 \<<< $DEPLOY_KEY
+                    mkdir ~/.appstoreconnect
+                    mkdir ~/.appstoreconnect/private_keys
+                    cp AuthKey_8MRB582VKQ.p8 ~/.appstoreconnect/private_keys
+
+            - run:
+                name: Validate the application ipa
+                context: ios-global
+                working_directory: ~/Sprout30/ios
+                command: xcrun altool --validate-app -f ~/release-ipa/LiveBetter.ipa -t ios --apiKey 8MRB582VKQ --apiIssuer $DEPLOY_ISSUER
+
+            - run:
+                name: Upload the application ipa
+                context: ios-global
+                working_directory: ~/Sprout30/ios
+                command: xcrun altool --upload-app -f ~/release-ipa/LiveBetter.ipa -t ios --apiKey 8MRB582VKQ --apiIssuer $DEPLOY_ISSUER
+
+            - run:
+                name: Commit the Info.plist files
+                working_directory: ~/Sprout30/ios
+                command: |
+                    git config user.name SproutGithub
+                    git config user.email "dev@sproutatwork.com"
+                    git branch --set-upstream-to=origin/$CIRCLE_BRANCH $CIRCLE_BRANCH
+                    git pull
+                    git add LiveBetter-tvOS/Info.plist LiveBetter-tvOSTests/Info.plist LiveBetter-watchOS\ Extension/Info.plist
+                    git add LiveBetter-watchOS/Info.plist LiveBetter.xcodeproj/project.pbxproj LiveBetter/Info.plist LiveBetterTests/Info.plist
+                    git commit -m "[ci skip] $CIRCLE_BRANCH - Bumped the iOS build version"
+                    git push
+                    export PLIST=LiveBetter/Info.plist
+                    SHORT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$PLIST")
+                    BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$PLIST")
+                    cd ~/Sprout30
+                    git tag v-LB-$SHORT_VERSION-build$BUILD_NUMBER
+                    git push origin --tags
+
+            - run:
+                name: Build map file
+                working_directory: ~/Sprout30
+                command: |
+                    npm run build:ios
+
+            - run:
+                name: Install AWS CLI for IOS
+                working_directory: ~/Sprout30/ios
+                command: |
+                    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+                    sudo installer -pkg AWSCLIV2.pkg -target /
+
+            - run:
+                name: Copy map file to S3
+                working_directory: ~/Sprout30
+                command: |
+                    export PLIST=~/Sprout30/ios/LiveBetter/Info.plist
+                    SHORT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$PLIST")
+                    BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$PLIST")
+                    export VERSION=$SHORT_VERSION.$BUILD_NUMBER
+                    export npm_package_name=$(cat package.json | grep name | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[[:space:]]')
+                    echo "PACKAGE NAME IS $npm_package_name"
+                    cd ios
+                    cp main.jsbundle.map main.jsbundle.map.$npm_package_name.$VERSION
+                    echo main.jsbundle.map.$npm_package_name.$VERSION
+                    aws s3 cp main.jsbundle.map.$npm_package_name.$VERSION s3://mobile3-mapfiles/
+                    curl -X POST -H 'Content-type: application/json' \
+                    --data '{"text":  "'"LiveBetter iVY iOS version $VERSION was built successfully and available on testflight"'" }' \
+                    https://hooks.slack.com/services/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
+
+            - run:
+                name: Tag Jira with ios build number
+                working_directory: ~/Sprout30
+                command: |
+                    npm run updateJira:ios
+
+
+  merge-with-ivy:
+    docker:
+      - image: circleci/node
+    working_directory: ~/Sprout30
+    steps:
+      - checkout
+      - run:
+          name: Merge ivy changes to Medibank branch
+          working_directory: ~/Sprout30
+          command: |
+              set -x
+              git config user.name SproutGithub
+              git config user.email "dev@sproutatwork.com"
+              git config merge.ours.driver true
+              git fetch --all
+              git merge origin/ivy_release -m '[ci skip] Merging ivy changes'
+              git push origin medibank_ivy_release
 
 workflows:
-  workflow:
-    when:
-      equal: ["latest", << pipeline.parameters.rollback >>]
+  version: 2.1
+  build_and_deploy:
     jobs:
-      - test
-      - test-assets
-      - build:
+      - build
+      - deploy:
           requires:
-            - test
-            - test-assets
+            - build
+          filters:
+            branches:
+              only: medibank_ivy_release
+  build_push_appstore:
+    triggers:
+      - schedule:
+          cron: "55 14 * * 1-5"
           filters:
             branches:
               only:
-                - master
-                - /staging-.*/
-                - /sandbox-.*/
-  rollback:
-    unless:
-      equal: ["latest", << pipeline.parameters.rollback >>]
+                - medibank_ivy_release
     jobs:
-      - rollback
-
-jobs:
-  test:
-    docker:
-      - image: circleci/elixir:1.9.1
-        user: root
-      - image: redis
-      - image: mdillon/postgis
-        environment:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-
-    working_directory: ~/repo
-    steps:
-      - checkout
-      - run:
-          name: Install Dependencies
-          command: ./ci/provision.sh
-      - restore_cache:
-          key: v1-test-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
-      - run:
-          name: Run Unit Test
-          command: ./ci/test.sh
-      - save_cache:
-          key: v1-test-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
-          paths:
-            - "assets/node_modules"
-            - "deps"
-            - "_build"
-      - slack/status:
-          fail_only: true
-          mentions: "here"
-          only_for_branches: "master"
-
-  test-assets:
-    docker:
-      - image: cimg/node:12.18
-        user: root
-    working_directory: ~/repo
-    steps:
-      - checkout
-      - run:
-          name: Install `apt-get` Dependencies
-          command: |
-            apt-get update -qq && apt-get install -qq -y \
-              libgtk2.0-0 libgtk-3-0 libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2 libxtst6 xauth xvfb
-      - restore_cache:
-          key: v2-test-assets-{{ checksum "assets/package-lock.json" }}
-      - run:
-          name: Install `package.json` Dependencies
-          command: |
-            cd assets
-            if [[ ! -d node_modules ]]; then
-              npm ci
-            fi
-      - save_cache:
-          key: v2-test-assets-{{ checksum "assets/package-lock.json" }}
-          paths:
-            - "assets/node_modules"
-            - "/root/.cache/Cypress"
-      - run:
-          name: Build
-          command: |
-            cd assets
-            node_modules/.bin/webpack --mode production --env.COMMITID=$CIRCLE_SHA1 --config ./webpack.config.fwn.js
-            node_modules/.bin/webpack --mode production --env.COMMITID=$CIRCLE_SHA1 --config ./webpack.config.pwa.js
-            node_modules/.bin/webpack --mode production --env.COMMITID=$CIRCLE_SHA1 --config ./webpack.config.tvapp.js
-      - run:
-          name: Test
-          command: |
-            cd assets
-            npm run test:ci
-
-  build:
-    docker:
-      - image: circleci/elixir:1.9.1
-        user: root
-
-    working_directory: ~/repo
-    steps:
-      - checkout
-      - setup_remote_docker:
-          version: 17.10.0-ce
-      - run:
-          name: Install Dependencies
-          command: ./ci/provision.sh
-      - restore_cache:
-          key: v1-release-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
-      - deploy:
-          name: Deployment
-          command: ./ci/deploy.sh
-      - save_cache:
-          key: v1-release-{{ checksum "mix.lock" }}-{{ checksum "package-lock.json" }}-{{ checksum "assets/package-lock.json" }}
-          paths:
-            - "assets/node_modules"
-            - "deps"
-            - "_build"
-      - slack/status:
-          fail_only: true
-          mentions: "here"
-          only_for_branches: "master"
-
-  rollback:
-    docker:
-      - image: circleci/elixir:1.9.1
-        user: root
-
-    working_directory: ~/repo
-    steps:
-      - checkout
-      - run:
-          name: Install Dependencies
-          command: ./ci/provision.sh
-      - run:
-          name: Rollback in dry run mode
-          command: DRYRUN=true ./ci/maintenance.sh rollback << pipeline.parameters.rollback >>
-          when:
-            condition: << pipeline.parameters.dryrun >>
-      - run:
-          name: Rollback
-          command: ./ci/maintenance.sh rollback << pipeline.parameters.rollback >>
-          unless:
-            condition: << pipeline.parameters.dryrun >>
-      - slack/status:
-          mentions: "here"
+      - merge-with-ivy
+      - build-ios:
+          requires:
+            - merge-with-ivy
+          context: lb-global
+          push_to_app_store: "yes"
+      - build-android:
+          requires:
+            - merge-with-ivy
+          context: lb-global
+          push_to_app_store: "yes"
