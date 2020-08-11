@@ -52,7 +52,7 @@ workflows:
           filters: 
             branches:
               only:
-                - /test\/test\/.*/i
+                - /my\/test\/.*/i
                 
                 #test
    
