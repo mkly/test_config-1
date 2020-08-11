@@ -53,6 +53,8 @@ workflows:
             branches:
               only:
                 - test\/test\/.*/i
+                
+                #test
    
 
 
