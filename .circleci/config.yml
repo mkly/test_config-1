@@ -49,11 +49,8 @@ workflows:
           name: deploy google-bigquery-service
           directory: ./services/GoogleBigQueryService/
           packagename: google-bigquery-service
-          filters:
-            branches:
-              only:
-                - initial
-                - master
+
+
       - deploy_github_package:
           name: deploy google-storage-service
           directory: ./services/GoogleStorageService/
