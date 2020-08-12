@@ -23,7 +23,7 @@ jobs:
       NODE_ENV: circleci
     steps:
       - run: |
-          echo "hello world"
+          echo << parameters.packagename >>
 #       - checkout:
 #           path: ~/repo
 #       - run: |
