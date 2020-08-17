@@ -59,16 +59,26 @@
  workflows:
    my-workflow:
      jobs:
-       - run-tests:
-           context: my_contexts       
+       - run-tests
+                
       
  jobs:
    run-tests:
      docker:
-       - image: cimg/base:2020.01
+       - image: circleci/node
      steps:
        - checkout
-       - run: 
-           name: "echo environment variables from org-global context"
-           command: echo $MY_ENV_VAR
+       - run: echo "hello world"
+   job_2:
+     docker:
+       - image: circleci/node
+     steps:
+       - add_ssh_keys:
+            fingerprints:
+                  f1:91:fe:9a:85:b6:72:cd:fa:b5:2d:ae:f4:f3:c1:79
+                  
+       - checkout
+       - run: echo "hello world"       
+       
+           
 
