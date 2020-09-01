@@ -117,8 +117,8 @@ jobs:
   deploy:
     docker:
       - image: circleci/node:<< pipeline.parameters.image-tag >>
-#     environment:
-#       IMAGETAG: << pipeline.parameters.image-tag >>
+    environment:
+      IMAGETAG: << pipeline.git.tag >>
 #     working_directory: << pipeline.parameters.workingdir >>
     steps:
       - run: echo "Hello world!"       
