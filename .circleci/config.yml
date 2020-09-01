@@ -107,7 +107,7 @@ workflows:
               only: /production-.*/
             branches:
               ignore: /.*/
-          environment: << pipeline.git.tag >>
+#           environment: << pipeline.git.tag >>
 
 jobs:
   deploy:
@@ -115,6 +115,7 @@ jobs:
       environment:
         type: string
     steps:
-      - run: some-command << parameters.environment >>        
+#       - run: some-command << parameters.environment >>        
+      - run: echo "hello world!"          
 
 #test
