@@ -13,6 +13,8 @@ workflows:
 
 jobs:
   deploy:
+    docker:
+    - image: circleci/node
     parameters:
       environment:
         type: string
