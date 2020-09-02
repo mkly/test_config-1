@@ -16,7 +16,7 @@ jobs:
     docker:
     - image: circleci/node
     parameters:
-      environment:
+      thing:
         type: string
     steps:
-      - run: some-command << parameters.environment >>
+      - run: some-command << parameters.thing >>
