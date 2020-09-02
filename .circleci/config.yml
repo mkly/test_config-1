@@ -18,6 +18,6 @@ jobs:
     parameters:
       environment:
         type: string
-        default: ''
+        
     steps:
       - run: some-command << parameters.environment >>
