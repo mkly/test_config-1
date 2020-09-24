@@ -67,7 +67,8 @@ workflows:
             - build
   second_workflow:
     when:
-      equal: [ /develop.*/,  << pipeline.git.branch >> ]
+      - not: 
+          equal: [ /develop.*/,  << pipeline.git.branch >> ]
     jobs:
       - build
 #           filters:
