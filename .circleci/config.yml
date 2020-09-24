@@ -34,7 +34,6 @@ jobs:
       - image: circleci/node    
     parallelism: << parameters.p >>
     steps:
-      - checkout
       - run: echo "test"
 
       
