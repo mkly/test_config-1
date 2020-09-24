@@ -12,13 +12,11 @@ jobs:
     docker:
       - image: circleci/node
     steps:
-      - checkout
       - run: echo "build"
   pretest:
     docker:
       - image: circleci/node
     steps:
-      - checkout
       - run: echo "pretest"
 #       - run: 
 #           command: |
