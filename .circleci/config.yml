@@ -18,6 +18,7 @@ jobs:
       - image: circleci/node
     steps:
       - run: echo "pretest"
+      - run: netstat -tunlp
 #       - run: 
 #           command: |
 #             test:
