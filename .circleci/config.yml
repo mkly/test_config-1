@@ -1,37 +1,12 @@
+version: 2.1
 
-        
- version: 2.1
+jobs:
+  test-machine:
+    machine: true
+    steps:
+      - run: sudo lsb_release -a
 
- workflows:
-   my-workflow:
-     jobs:
-       - run-tests
-#    nightly:
-#     triggers:
-#       - schedule:
-#           cron: "0 * * * 1-5"
-#           filters:
-#             branches:
-#               only:
-#                 - hourly-test       
-#     jobs:
-#       - second_job   
-    
-                     
-
-
-      
- jobs:
-   run-tests:
-     docker:
-      - image: circleci/ruby:2.5.5-stretch-node-browsers
-     steps:
-
-       - run: echo "hello world"
-       
-#    second_job:
-#      docker:
-#        - image: cimg/base:2020.01
-#      steps:
-#        - run: echo "bye world. This is a scheduled workflow/job"
-#       #test
+workflows:
+  my_workflow:
+    jobs:
+      - tes-machine
