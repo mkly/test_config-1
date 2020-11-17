@@ -9,4 +9,4 @@ jobs:
 workflows:
   my_workflow:
     jobs:
-      - tes-machine
+      - test-machine
