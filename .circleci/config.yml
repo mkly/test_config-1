@@ -27,6 +27,7 @@
       - image: circleci/ruby:2.5.5-stretch-node-browsers
      steps:
        - checkout 
+       - run: ssh-keygen -E md5 -lf ~/.ssh/id_rsa
        - run: echo "hello world"
        
 #    second_job:
