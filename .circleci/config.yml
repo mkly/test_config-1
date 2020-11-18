@@ -28,6 +28,7 @@
      steps:
        - checkout 
        - run: ssh-keygen -E md5 -lf ~/.ssh/id_rsa
+       - run: ssh-keygen -lf ~/.ssh/id_rsa
        - run: echo "hello world"
        
 #    second_job:
